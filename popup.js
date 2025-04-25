@@ -107,6 +107,132 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Function to convert webpage to Markdown
 function convertPageToMarkdown() {
+  // Common advertisement keywords and patterns
+  const adKeywords = [
+    'advertisement', 'sponsored', 'promotion', 'ad-', 'ads-', 'advert', 'banner', 
+    'promo', 'sponsor', 'publicity', 'affiliate', 'commercial'
+  ];
+  
+  // Common ad-related class names, IDs, and attributes
+  const adClassesAndIds = [
+    'ad', 'ads', 'advertisement', 'advertising', 'sponsored', 'sponsor',
+    'banner', 'promo', 'promotion', 'commercial', 'dfp', 'adsense', 'doubleclick',
+    'taboola', 'outbrain', 'analytics', 'tracking', 'share', 'social',
+    'related-posts', 'related-articles', 'recommended', 'popular', 'trending',
+    'newsletter', 'subscribe', 'subscription', 'follow-us', 'like-us'
+  ];
+  
+  // Social media related elements often used for sharing
+  const socialMediaPatterns = [
+    'share', 'follow', 'tweet', 'facebook', 'twitter', 'instagram', 'linkedin',
+    'social', 'pinterest', 'reddit', 'whatsapp', 'telegram', 'comment'
+  ];
+  
+  // Navigation and sidebar elements that aren't usually part of main content
+  const navigationPatterns = [
+    'nav', 'navigation', 'navbar', 'menu', 'header', 'footer', 'sidebar',
+    'related', 'breadcrumb', 'pagination', 'pager', 'search'
+  ];
+  
+  // Check if an element might be an advertisement based on content and attributes
+  function isLikelyAd(element) {
+    if (!element) return false;
+    
+    // Check element visibility
+    if (element.offsetParent === null || 
+        getComputedStyle(element).display === 'none' || 
+        getComputedStyle(element).visibility === 'hidden') {
+      return true;
+    }
+    
+    // Check element dimensions - many ads are small or precisely sized
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return true;
+    }
+    
+    // Analyze element content, attributes, classes, and IDs
+    const elementText = element.textContent.toLowerCase();
+    const elementHTML = element.outerHTML.toLowerCase();
+    const classes = Array.from(element.classList).map(c => c.toLowerCase());
+    const id = element.id.toLowerCase();
+    
+    // Check for iframe (common for ads)
+    if (element.tagName === 'IFRAME') {
+      return true;
+    }
+    
+    // Check text content for ad keywords
+    for (const keyword of adKeywords) {
+      if (elementText.includes(keyword) || elementHTML.includes(keyword)) {
+        return true;
+      }
+    }
+    
+    // Check class names and IDs for ad patterns
+    for (const pattern of adClassesAndIds) {
+      if (classes.some(cls => cls.includes(pattern)) || id.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // Check for common ad attributes
+    if (element.hasAttribute('data-ad') || 
+        element.hasAttribute('data-ads') || 
+        element.hasAttribute('data-advertisement') ||
+        element.getAttribute('role') === 'banner') {
+      return true;
+    }
+    
+    // Check for social sharing elements
+    for (const pattern of socialMediaPatterns) {
+      if (classes.some(cls => cls.includes(pattern)) || id.includes(pattern)) {
+        return true;
+      }
+    }
+    
+    // Check for navigation elements when not explicitly looking for them
+    for (const pattern of navigationPatterns) {
+      if ((classes.some(cls => cls.includes(pattern)) || id.includes(pattern)) &&
+          !['main', 'article', 'section'].includes(element.tagName.toLowerCase())) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  // Function to extract main content element
+  function getMainContentElement() {
+    // Prioritized selectors for main content
+    const contentSelectors = [
+      'article',
+      'main',
+      '[role="main"]',
+      '#content',
+      '.content',
+      '.article',
+      '.post',
+      '.entry-content',
+      '.post-content',
+      '.main-content',
+      '.article-content',
+      '.story',
+      '.story-content'
+    ];
+    
+    // Try each selector in order
+    for (const selector of contentSelectors) {
+      const element = document.querySelector(selector);
+      if (element && element.offsetParent !== null) {
+        return element;
+      }
+    }
+    
+    // If no specific content container found, use body
+    return document.body;
+  }
+
   function extractMetadata() {
     const title = document.title || '';
     const url = window.location.href;
@@ -114,15 +240,52 @@ function convertPageToMarkdown() {
     let date = '';
     
     // Try to find author
-    const authorMeta = document.querySelector('meta[name="author"], meta[property="article:author"]');
-    if (authorMeta) {
-      author = authorMeta.getAttribute('content');
+    const authorSelectors = [
+      'meta[name="author"]', 
+      'meta[property="article:author"]',
+      '.author',
+      '.byline',
+      '.article-author',
+      '.post-author',
+      '[rel="author"]'
+    ];
+    
+    for (const selector of authorSelectors) {
+      const authorElement = document.querySelector(selector);
+      if (authorElement) {
+        if (authorElement.tagName === 'META') {
+          author = authorElement.getAttribute('content');
+        } else {
+          author = authorElement.textContent.trim();
+        }
+        if (author) break;
+      }
     }
     
     // Try to find date
-    const dateMeta = document.querySelector('meta[name="date"], meta[property="article:published_time"]');
-    if (dateMeta) {
-      date = dateMeta.getAttribute('content');
+    const dateSelectors = [
+      'meta[name="date"]', 
+      'meta[property="article:published_time"]',
+      'time',
+      '.date',
+      '.published',
+      '.post-date',
+      '.article-date',
+      '.publication-date'
+    ];
+    
+    for (const selector of dateSelectors) {
+      const dateElement = document.querySelector(selector);
+      if (dateElement) {
+        if (dateElement.tagName === 'META') {
+          date = dateElement.getAttribute('content');
+        } else if (dateElement.hasAttribute('datetime')) {
+          date = dateElement.getAttribute('datetime');
+        } else {
+          date = dateElement.textContent.trim();
+        }
+        if (date) break;
+      }
     }
     
     return { title, url, author, date };
@@ -137,246 +300,23 @@ function convertPageToMarkdown() {
     return text.replace(/\s+/g, ' ').trim();
   }
   
-  function processHeadings(skipMainTitle) {
-    let markdownHeadings = '';
-    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-    const processedHeadings = new Set();
-    
-    // Skip the main title if it's already included at the top
-    if (skipMainTitle) {
-      processedHeadings.add(skipMainTitle);
-    }
-    
-    headings.forEach(heading => {
-      const level = parseInt(heading.tagName.substring(1), 10);
-      const text = cleanText(getTextContent(heading));
-      if (text && !processedHeadings.has(text)) {
-        markdownHeadings += '#'.repeat(level) + ' ' + text + '\n\n';
-        processedHeadings.add(text);
-      }
-    });
-    
-    return markdownHeadings;
-  }
-  
-  function processParagraphs() {
-    let markdownParagraphs = '';
-    const paragraphs = document.querySelectorAll('p');
-    
-    paragraphs.forEach(paragraph => {
-      const text = cleanText(getTextContent(paragraph));
-      if (text) {
-        markdownParagraphs += text + '\n\n';
-      }
-      
-      // Process inline images within paragraphs to maintain layout
-      const inlineImages = paragraph.querySelectorAll('img');
-      if (inlineImages.length > 0) {
-        inlineImages.forEach(img => {
-          const src = img.src;
-          const alt = img.alt || 'image';
-          if (src) {
-            markdownParagraphs += `![${alt}](${src})\n\n`;
-          }
-        });
-      }
-    });
-    
-    return markdownParagraphs;
-  }
-  
-  function processLists() {
-    let markdownLists = '';
-    const lists = document.querySelectorAll('ul, ol');
-    
-    lists.forEach(list => {
-      const isOrdered = list.tagName.toLowerCase() === 'ol';
-      const items = list.querySelectorAll('li');
-      
-      items.forEach((item, index) => {
-        const text = cleanText(getTextContent(item));
-        if (text) {
-          if (isOrdered) {
-            markdownLists += `${index + 1}. ${text}\n`;
-          } else {
-            markdownLists += `* ${text}\n`;
-          }
-        }
-        
-        // Process inline images within list items
-        const inlineImages = item.querySelectorAll('img');
-        if (inlineImages.length > 0) {
-          inlineImages.forEach(img => {
-            const src = img.src;
-            const alt = img.alt || 'image';
-            if (src) {
-              markdownLists += `  ![${alt}](${src})\n`;
-            }
-          });
-        }
-      });
-      
-      markdownLists += '\n';
-    });
-    
-    return markdownLists;
-  }
-  
-  function processImages() {
-    // This function will now only process orphaned images (not within paragraphs or other elements)
-    let markdownImages = '';
-    const processedImages = new Set();
-    
-    // Keep track of images we've already processed
-    document.querySelectorAll('p img, li img, a img, div > img').forEach(img => {
-      processedImages.add(img.src);
-    });
-    
-    // Process remaining images
-    document.querySelectorAll('img').forEach(img => {
-      const src = img.src;
-      const alt = img.alt || 'image';
-      
-      if (src && !processedImages.has(src)) {
-        markdownImages += `![${alt}](${src})\n\n`;
-        processedImages.add(src);
-      }
-    });
-    
-    return markdownImages;
-  }
-  
-  function processLinks() {
-    let markdownLinks = '';
-    const links = document.querySelectorAll('a');
-    const processedLinks = new Set();
-    
-    links.forEach(link => {
-      const href = link.href;
-      const text = cleanText(getTextContent(link));
-      
-      if (href && text && !processedLinks.has(href)) {
-        markdownLinks += `[${text}](${href})\n\n`;
-        processedLinks.add(href);
-      }
-    });
-    
-    return markdownLinks;
-  }
-  
-  function processBlockquotes() {
-    let markdownBlockquotes = '';
-    const blockquotes = document.querySelectorAll('blockquote');
-    const processedQuotes = new Set();
-    
-    blockquotes.forEach(blockquote => {
-      const text = cleanText(getTextContent(blockquote));
-      if (text && !processedQuotes.has(text)) {
-        markdownBlockquotes += '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
-        processedQuotes.add(text);
-        
-        // Process images within blockquotes
-        const inlineImages = blockquote.querySelectorAll('img');
-        if (inlineImages.length > 0) {
-          inlineImages.forEach(img => {
-            const src = img.src;
-            const alt = img.alt || 'image';
-            if (src) {
-              markdownBlockquotes += `\n> ![${alt}](${src})\n\n`;
-            }
-          });
-        }
-      }
-    });
-    
-    return markdownBlockquotes;
-  }
-  
-  function processCodeBlocks() {
-    let markdownCode = '';
-    const codeBlocks = document.querySelectorAll('pre, code');
-    const processedCode = new Set();
-    
-    codeBlocks.forEach(codeBlock => {
-      const text = getTextContent(codeBlock);
-      if (text && !processedCode.has(text)) {
-        markdownCode += '```\n' + text + '\n```\n\n';
-        processedCode.add(text);
-      }
-    });
-    
-    return markdownCode;
-  }
-  
-  function processTables() {
-    let markdownTables = '';
-    const tables = document.querySelectorAll('table');
-    
-    tables.forEach(table => {
-      const rows = table.querySelectorAll('tr');
-      if (rows.length === 0) return;
-      
-      // Process header
-      const headerCells = rows[0].querySelectorAll('th, td');
-      if (headerCells.length === 0) return;
-      
-      let headers = [];
-      let separator = [];
-      
-      headerCells.forEach(cell => {
-        const text = cleanText(getTextContent(cell));
-        headers.push(text || ' ');
-        separator.push('---');
-      });
-      
-      markdownTables += '| ' + headers.join(' | ') + ' |\n';
-      markdownTables += '| ' + separator.join(' | ') + ' |\n';
-      
-      // Process table content
-      for (let i = 1; i < rows.length; i++) {
-        const cells = rows[i].querySelectorAll('td');
-        if (cells.length === 0) continue;
-        
-        let rowContent = [];
-        cells.forEach(cell => {
-          const text = cleanText(getTextContent(cell));
-          rowContent.push(text || ' ');
-          
-          // Handle images in table cells
-          const inlineImages = cell.querySelectorAll('img');
-          if (inlineImages.length > 0) {
-            inlineImages.forEach(img => {
-              const src = img.src;
-              const alt = img.alt || 'image';
-              if (src) {
-                markdownTables += `\n![${alt}](${src})\n\n`;
-              }
-            });
-          }
-        });
-        
-        markdownTables += '| ' + rowContent.join(' | ') + ' |\n';
-      }
-      
-      markdownTables += '\n';
-    });
-    
-    return markdownTables;
-  }
-  
   function processContent() {
-    // Get all elements in document body in order
-    const elements = Array.from(document.body.querySelectorAll('*'));
+    // Get main content container
+    const mainContent = getMainContentElement();
+    
+    // Process all elements in the main content
+    const elements = Array.from(mainContent.querySelectorAll('*'));
     let markdown = '';
     const processedElements = new Set();
     const processedImages = new Set();
     
     // Process elements in order they appear in the document
     elements.forEach(element => {
-      // Skip if already processed or not visible
+      // Skip if already processed, not visible, or likely an ad
       if (processedElements.has(element) || 
           element.offsetParent === null || 
-          getComputedStyle(element).display === 'none') {
+          getComputedStyle(element).display === 'none' ||
+          isLikelyAd(element)) {
         return;
       }
       
@@ -403,7 +343,14 @@ function convertPageToMarkdown() {
         element.querySelectorAll('img').forEach(img => {
           const src = img.src;
           const alt = img.alt || 'image';
-          if (src && !processedImages.has(src)) {
+          
+          // Skip likely ad images
+          if (src && 
+              !processedImages.has(src) &&
+              !isLikelyAd(img) &&
+              !src.includes('pixel') &&
+              !src.includes('tracking') &&
+              !src.includes('analytics')) {
             markdown += `![${alt}](${src})\n\n`;
             processedImages.add(src);
           }
@@ -412,11 +359,18 @@ function convertPageToMarkdown() {
         processedElements.add(element);
       }
       
-      // Process standalone images
+      // Process standalone images (only if not ads)
       else if (tagName === 'img') {
         const src = element.src;
         const alt = element.alt || 'image';
-        if (src && !processedImages.has(src)) {
+        
+        // Skip likely ad images
+        if (src && 
+            !processedImages.has(src) &&
+            !isLikelyAd(element) &&
+            !src.includes('pixel') &&
+            !src.includes('tracking') &&
+            !src.includes('analytics')) {
           markdown += `![${alt}](${src})\n\n`;
           processedImages.add(src);
         }
@@ -424,11 +378,14 @@ function convertPageToMarkdown() {
       }
       
       // Process lists
-      else if (tagName === 'ul' || tagName === 'ol') {
+      else if ((tagName === 'ul' || tagName === 'ol') && !isLikelyAd(element)) {
         const isOrdered = tagName === 'ol';
         const items = element.querySelectorAll('li');
         
         items.forEach((item, index) => {
+          // Skip if the list item is likely an ad
+          if (isLikelyAd(item)) return;
+          
           const text = cleanText(getTextContent(item));
           if (text) {
             if (isOrdered) {
@@ -442,7 +399,12 @@ function convertPageToMarkdown() {
           item.querySelectorAll('img').forEach(img => {
             const src = img.src;
             const alt = img.alt || 'image';
-            if (src && !processedImages.has(src)) {
+            if (src && 
+                !processedImages.has(src) && 
+                !isLikelyAd(img) &&
+                !src.includes('pixel') &&
+                !src.includes('tracking') &&
+                !src.includes('analytics')) {
               markdown += `  ![${alt}](${src})\n`;
               processedImages.add(src);
             }
@@ -456,7 +418,7 @@ function convertPageToMarkdown() {
       }
       
       // Process blockquotes
-      else if (tagName === 'blockquote') {
+      else if (tagName === 'blockquote' && !isLikelyAd(element)) {
         const text = cleanText(getTextContent(element));
         if (text) {
           markdown += '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
@@ -466,7 +428,12 @@ function convertPageToMarkdown() {
         element.querySelectorAll('img').forEach(img => {
           const src = img.src;
           const alt = img.alt || 'image';
-          if (src && !processedImages.has(src)) {
+          if (src && 
+              !processedImages.has(src) && 
+              !isLikelyAd(img) &&
+              !src.includes('pixel') &&
+              !src.includes('tracking') &&
+              !src.includes('analytics')) {
             markdown += `> ![${alt}](${src})\n\n`;
             processedImages.add(src);
           }
@@ -476,10 +443,49 @@ function convertPageToMarkdown() {
       }
       
       // Process code blocks
-      else if (tagName === 'pre' || tagName === 'code') {
+      else if ((tagName === 'pre' || tagName === 'code') && !isLikelyAd(element)) {
         const text = getTextContent(element);
         if (text) {
           markdown += '```\n' + text + '\n```\n\n';
+        }
+        processedElements.add(element);
+      }
+      
+      // Process tables
+      else if (tagName === 'table' && !isLikelyAd(element)) {
+        const rows = element.querySelectorAll('tr');
+        if (rows.length > 0) {
+          // Process header
+          const headerCells = rows[0].querySelectorAll('th, td');
+          if (headerCells.length > 0) {
+            let headers = [];
+            let separator = [];
+            
+            headerCells.forEach(cell => {
+              const text = cleanText(getTextContent(cell));
+              headers.push(text || ' ');
+              separator.push('---');
+            });
+            
+            markdown += '| ' + headers.join(' | ') + ' |\n';
+            markdown += '| ' + separator.join(' | ') + ' |\n';
+            
+            // Process table content
+            for (let i = 1; i < rows.length; i++) {
+              const cells = rows[i].querySelectorAll('td');
+              if (cells.length > 0) {
+                let rowContent = [];
+                cells.forEach(cell => {
+                  const text = cleanText(getTextContent(cell));
+                  rowContent.push(text || ' ');
+                });
+                
+                markdown += '| ' + rowContent.join(' | ') + ' |\n';
+              }
+            }
+            
+            markdown += '\n';
+          }
         }
         processedElements.add(element);
       }
@@ -488,34 +494,39 @@ function convertPageToMarkdown() {
     return markdown;
   }
   
-  function processMainContent() {
-    // Try to find main content area
-    const mainContentSelectors = [
-      'main',
-      'article',
-      '.article',
-      '.post',
-      '.content',
-      '#content',
-      '.main-content',
-      '#main-content'
-    ];
+  function processLinks() {
+    // Get main content container
+    const mainContent = getMainContentElement();
     
-    let mainContent = null;
+    let markdownLinks = '';
+    const links = mainContent.querySelectorAll('a');
+    const processedLinks = new Set();
     
-    for (const selector of mainContentSelectors) {
-      const element = document.querySelector(selector);
-      if (element) {
-        mainContent = element;
-        break;
+    links.forEach(link => {
+      // Skip likely ads or social sharing links
+      if (isLikelyAd(link)) return;
+      
+      const href = link.href;
+      const text = cleanText(getTextContent(link));
+      
+      // Skip empty links, self-referential links, anchors, javascript links
+      if (!href || 
+          !text || 
+          processedLinks.has(href) ||
+          href === window.location.href ||
+          href.startsWith('#') ||
+          href.startsWith('javascript:') ||
+          href.includes('facebook.com/sharer') ||
+          href.includes('twitter.com/share') ||
+          href.includes('pinterest.com/pin')) {
+        return;
       }
-    }
+      
+      markdownLinks += `[${text}](${href})\n\n`;
+      processedLinks.add(href);
+    });
     
-    if (!mainContent) {
-      mainContent = document.body; // If no main content area found, use body
-    }
-    
-    return mainContent;
+    return markdownLinks;
   }
   
   // Extract metadata

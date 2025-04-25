@@ -4,49 +4,53 @@ Web2Markdown is a Chrome browser extension that converts the current webpage to 
 
 ## Features
 
-- One-click conversion of webpage to Markdown format
-- Copy Markdown content to clipboard
-- Download Markdown file locally
-- Automatically extract webpage metadata (title, links, author, date, etc.)
-- Intelligently identify main content area of webpage
+- Automatically converts web pages to Markdown format
+- Supports copying Markdown content to clipboard
+- Supports downloading Markdown files locally
+- Automatically extracts webpage title, links, author, date and other metadata
+- Intelligently identifies the main content area of the webpage
+- Preserves original page layout in the Markdown output
+- Filters out advertisements and irrelevant content
 
 ## Installation
 
 ### Install from Chrome Web Store (Recommended)
 
-1. Visit Web2Markdown page on Chrome Web Store
-2. Click "Add to Chrome" button
+1. Visit the Web2Markdown page on the Chrome Web Store
+2. Click the "Add to Chrome" button
 
-### Manual Installation (Development Mode)
+### Manual Installation (Developer Mode)
 
-1. Download or clone this repository to your local machine
-2. Open Chrome browser and go to the Extensions page (chrome://extensions/)
-3. Turn on the "Developer mode" toggle
-4. Click "Load unpacked"
+1. Download or clone this repository locally
+2. Open Chrome browser, go to the extensions page (chrome://extensions/)
+3. Turn on "Developer mode" in the top right corner
+4. Click "Load unpacked extension"
 5. Select the folder containing this repository
 
 ## Usage
 
-1. Click the extension icon on the webpage you want to convert
-2. Click "Convert to Markdown"
-3. Wait for conversion to complete, then you can:
-   - Click "Copy to Clipboard" to copy the content to your clipboard
-   - Click "Download Markdown File" to save the content as a local file
+1. On the webpage you want to convert, click the extension icon
+2. The extension automatically converts the page to Markdown
+3. After conversion is complete, you can:
+   - Click "Copy to Clipboard" to copy the content to clipboard
+   - Click "Download Markdown" to save the content as a local file
+   - Edit the Markdown directly in the editor
+   - See a real-time preview of the Markdown
 
 ## Conversion Rules
 
-Web2Markdown will automatically extract and convert the following content:
+Web2Markdown automatically extracts and converts the following:
 
-- Webpage Title → Markdown Level 1 Header
-- Webpage Links, Author, Date → Markdown Metadata
-- Headers (h1-h6) → Markdown Headers
-- Paragraphs → Markdown Paragraphs
-- Lists → Markdown Lists
-- Images → Markdown Image Syntax
-- Links → Markdown Link Syntax
-- Block Quotes → Markdown Block Quotes
-- Code Blocks → Markdown Code Blocks
-- Tables → Markdown Tables
+- Webpage title → Markdown level 1 heading
+- Webpage link, author, date → Markdown metadata
+- Headings (h1-h6) → Markdown headings
+- Paragraphs → Markdown paragraphs
+- Lists → Markdown lists
+- Images → Markdown image syntax
+- Links → Markdown link syntax
+- Blockquotes → Markdown quotes
+- Code blocks → Markdown code blocks
+- Tables → Markdown tables
 
 ## License
 
