@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- 背景 -->
+  <rect width="16" height="16" rx="2" fill="#2563eb" />
+  
+  <!-- Markdown符号 - 简化版本适合小尺寸 -->
+  <g fill="white">
+    <!-- M标记 -->
+    <path d="M4 4v8h1.5l2.5-3 2.5 3H12V4H10v5l-2-2.5-2 2.5V4z" />
+  </g>
+</svg> 

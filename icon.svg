@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- 背景 -->
+  <rect width="128" height="128" rx="16" fill="#2563eb" />
+  
+  <!-- Markdown符号 -->
+  <g fill="white">
+    <!-- 主框架 -->
+    <rect x="28" y="28" width="72" height="72" rx="4" fill="none" stroke="white" stroke-width="5"/>
+    
+    <!-- M标记 -->
+    <path d="M42 40v48h10l12-15 12 15h10V40H76v30l-12-15-12 15V40z" />
+
+    <!-- 水平线 -->
+    <rect x="38" y="96" width="52" height="4" rx="2" />
+  </g>
+</svg>
