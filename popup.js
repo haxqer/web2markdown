@@ -3,12 +3,26 @@ document.addEventListener('DOMContentLoaded', function() {
   const copyBtn = document.getElementById('copyBtn');
   const downloadBtn = document.getElementById('downloadBtn');
   const statusDiv = document.getElementById('status');
+  const markdownEditor = document.getElementById('markdownEditor');
+  const preview = document.getElementById('preview');
   
   let markdownContent = '';
 
-  // 转换按钮点击事件
-  convertBtn.addEventListener('click', function() {
-    statusDiv.textContent = '正在转换...';
+  // Initialize marked
+  marked.setOptions({
+    breaks: true,
+    gfm: true
+  });
+
+  // Real-time preview
+  markdownEditor.addEventListener('input', function() {
+    const markdown = markdownEditor.value;
+    preview.innerHTML = marked.parse(markdown);
+  });
+
+  // Automatically convert the current page when popup opens
+  function autoConvert() {
+    statusDiv.textContent = 'Converting...';
     
     chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       chrome.scripting.executeScript({
@@ -16,83 +30,96 @@ document.addEventListener('DOMContentLoaded', function() {
         function: convertPageToMarkdown
       }, function(results) {
         if (chrome.runtime.lastError) {
-          statusDiv.textContent = '转换失败: ' + chrome.runtime.lastError.message;
+          statusDiv.textContent = 'Conversion failed: ' + chrome.runtime.lastError.message;
           return;
         }
         
         if (results && results[0]) {
           markdownContent = results[0].result;
           chrome.storage.local.set({'markdownContent': markdownContent});
-          statusDiv.textContent = '转换成功!';
+          markdownEditor.value = markdownContent;
+          preview.innerHTML = marked.parse(markdownContent);
+          statusDiv.textContent = 'Conversion successful!';
         }
       });
     });
-  });
+  }
 
-  // 复制按钮点击事件
+  // Convert button click event
+  convertBtn.addEventListener('click', autoConvert);
+
+  // Copy button click event
   copyBtn.addEventListener('click', function() {
-    chrome.storage.local.get('markdownContent', function(data) {
-      if (data.markdownContent) {
-        navigator.clipboard.writeText(data.markdownContent)
-          .then(() => {
-            statusDiv.textContent = '已复制到剪贴板!';
-          })
-          .catch(err => {
-            statusDiv.textContent = '复制失败: ' + err;
-          });
-      } else {
-        statusDiv.textContent = '请先转换网页';
-      }
-    });
+    const content = markdownEditor.value;
+    if (content) {
+      navigator.clipboard.writeText(content)
+        .then(() => {
+          statusDiv.textContent = 'Copied to clipboard!';
+        })
+        .catch(err => {
+          statusDiv.textContent = 'Copy failed: ' + err;
+        });
+    } else {
+      statusDiv.textContent = 'Please convert a webpage first';
+    }
   });
 
-  // 下载按钮点击事件
+  // Download button click event
   downloadBtn.addEventListener('click', function() {
-    chrome.storage.local.get('markdownContent', function(data) {
-      if (data.markdownContent) {
-        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-          const pageUrl = tabs[0].url;
-          const hostname = new URL(pageUrl).hostname;
-          const fileName = hostname.replace(/\./g, '_') + '.md';
-          
-          const blob = new Blob([data.markdownContent], {type: 'text/markdown'});
-          const downloadUrl = URL.createObjectURL(blob);
-          
-          chrome.downloads.download({
-            url: downloadUrl,
-            filename: fileName,
-            saveAs: true
-          }, function() {
-            if (chrome.runtime.lastError) {
-              statusDiv.textContent = '下载失败: ' + chrome.runtime.lastError.message;
-            } else {
-              statusDiv.textContent = '下载成功!';
-            }
-          });
+    const content = markdownEditor.value;
+    if (content) {
+      chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+        const pageUrl = tabs[0].url;
+        const hostname = new URL(pageUrl).hostname;
+        const fileName = hostname.replace(/\./g, '_') + '.md';
+        
+        const blob = new Blob([content], {type: 'text/markdown'});
+        const downloadUrl = URL.createObjectURL(blob);
+        
+        chrome.downloads.download({
+          url: downloadUrl,
+          filename: fileName,
+          saveAs: true
+        }, function() {
+          if (chrome.runtime.lastError) {
+            statusDiv.textContent = 'Download failed: ' + chrome.runtime.lastError.message;
+          } else {
+            statusDiv.textContent = 'Download successful!';
+          }
         });
-      } else {
-        statusDiv.textContent = '请先转换网页';
-      }
-    });
+      });
+    } else {
+      statusDiv.textContent = 'Please convert a webpage first';
+    }
+  });
+
+  // Load the last content or auto convert
+  chrome.storage.local.get('markdownContent', function(data) {
+    if (data.markdownContent) {
+      markdownEditor.value = data.markdownContent;
+      preview.innerHTML = marked.parse(data.markdownContent);
+    }
+    
+    // Auto convert when popup opens
+    autoConvert();
   });
 });
 
-// 将网页转换为Markdown的函数
+// Function to convert webpage to Markdown
 function convertPageToMarkdown() {
-  // 这个函数会在网页的上下文中执行
   function extractMetadata() {
     const title = document.title || '';
     const url = window.location.href;
     let author = '';
     let date = '';
     
-    // 尝试查找作者
+    // Try to find author
     const authorMeta = document.querySelector('meta[name="author"], meta[property="article:author"]');
     if (authorMeta) {
       author = authorMeta.getAttribute('content');
     }
     
-    // 尝试查找日期
+    // Try to find date
     const dateMeta = document.querySelector('meta[name="date"], meta[property="article:published_time"]');
     if (dateMeta) {
       date = dateMeta.getAttribute('content');
@@ -110,15 +137,22 @@ function convertPageToMarkdown() {
     return text.replace(/\s+/g, ' ').trim();
   }
   
-  function processHeadings() {
+  function processHeadings(skipMainTitle) {
     let markdownHeadings = '';
     const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    const processedHeadings = new Set();
+    
+    // Skip the main title if it's already included at the top
+    if (skipMainTitle) {
+      processedHeadings.add(skipMainTitle);
+    }
     
     headings.forEach(heading => {
       const level = parseInt(heading.tagName.substring(1), 10);
       const text = cleanText(getTextContent(heading));
-      if (text) {
+      if (text && !processedHeadings.has(text)) {
         markdownHeadings += '#'.repeat(level) + ' ' + text + '\n\n';
+        processedHeadings.add(text);
       }
     });
     
@@ -133,6 +167,18 @@ function convertPageToMarkdown() {
       const text = cleanText(getTextContent(paragraph));
       if (text) {
         markdownParagraphs += text + '\n\n';
+      }
+      
+      // Process inline images within paragraphs to maintain layout
+      const inlineImages = paragraph.querySelectorAll('img');
+      if (inlineImages.length > 0) {
+        inlineImages.forEach(img => {
+          const src = img.src;
+          const alt = img.alt || 'image';
+          if (src) {
+            markdownParagraphs += `![${alt}](${src})\n\n`;
+          }
+        });
       }
     });
     
@@ -156,6 +202,18 @@ function convertPageToMarkdown() {
             markdownLists += `* ${text}\n`;
           }
         }
+        
+        // Process inline images within list items
+        const inlineImages = item.querySelectorAll('img');
+        if (inlineImages.length > 0) {
+          inlineImages.forEach(img => {
+            const src = img.src;
+            const alt = img.alt || 'image';
+            if (src) {
+              markdownLists += `  ![${alt}](${src})\n`;
+            }
+          });
+        }
       });
       
       markdownLists += '\n';
@@ -165,15 +223,23 @@ function convertPageToMarkdown() {
   }
   
   function processImages() {
+    // This function will now only process orphaned images (not within paragraphs or other elements)
     let markdownImages = '';
-    const images = document.querySelectorAll('img');
+    const processedImages = new Set();
     
-    images.forEach(img => {
+    // Keep track of images we've already processed
+    document.querySelectorAll('p img, li img, a img, div > img').forEach(img => {
+      processedImages.add(img.src);
+    });
+    
+    // Process remaining images
+    document.querySelectorAll('img').forEach(img => {
       const src = img.src;
       const alt = img.alt || 'image';
       
-      if (src) {
+      if (src && !processedImages.has(src)) {
         markdownImages += `![${alt}](${src})\n\n`;
+        processedImages.add(src);
       }
     });
     
@@ -201,11 +267,25 @@ function convertPageToMarkdown() {
   function processBlockquotes() {
     let markdownBlockquotes = '';
     const blockquotes = document.querySelectorAll('blockquote');
+    const processedQuotes = new Set();
     
     blockquotes.forEach(blockquote => {
       const text = cleanText(getTextContent(blockquote));
-      if (text) {
+      if (text && !processedQuotes.has(text)) {
         markdownBlockquotes += '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
+        processedQuotes.add(text);
+        
+        // Process images within blockquotes
+        const inlineImages = blockquote.querySelectorAll('img');
+        if (inlineImages.length > 0) {
+          inlineImages.forEach(img => {
+            const src = img.src;
+            const alt = img.alt || 'image';
+            if (src) {
+              markdownBlockquotes += `\n> ![${alt}](${src})\n\n`;
+            }
+          });
+        }
       }
     });
     
@@ -215,11 +295,13 @@ function convertPageToMarkdown() {
   function processCodeBlocks() {
     let markdownCode = '';
     const codeBlocks = document.querySelectorAll('pre, code');
+    const processedCode = new Set();
     
     codeBlocks.forEach(codeBlock => {
       const text = getTextContent(codeBlock);
-      if (text) {
+      if (text && !processedCode.has(text)) {
         markdownCode += '```\n' + text + '\n```\n\n';
+        processedCode.add(text);
       }
     });
     
@@ -234,7 +316,7 @@ function convertPageToMarkdown() {
       const rows = table.querySelectorAll('tr');
       if (rows.length === 0) return;
       
-      // 处理表头
+      // Process header
       const headerCells = rows[0].querySelectorAll('th, td');
       if (headerCells.length === 0) return;
       
@@ -250,7 +332,7 @@ function convertPageToMarkdown() {
       markdownTables += '| ' + headers.join(' | ') + ' |\n';
       markdownTables += '| ' + separator.join(' | ') + ' |\n';
       
-      // 处理表格内容
+      // Process table content
       for (let i = 1; i < rows.length; i++) {
         const cells = rows[i].querySelectorAll('td');
         if (cells.length === 0) continue;
@@ -259,6 +341,18 @@ function convertPageToMarkdown() {
         cells.forEach(cell => {
           const text = cleanText(getTextContent(cell));
           rowContent.push(text || ' ');
+          
+          // Handle images in table cells
+          const inlineImages = cell.querySelectorAll('img');
+          if (inlineImages.length > 0) {
+            inlineImages.forEach(img => {
+              const src = img.src;
+              const alt = img.alt || 'image';
+              if (src) {
+                markdownTables += `\n![${alt}](${src})\n\n`;
+              }
+            });
+          }
         });
         
         markdownTables += '| ' + rowContent.join(' | ') + ' |\n';
@@ -270,8 +364,132 @@ function convertPageToMarkdown() {
     return markdownTables;
   }
   
+  function processContent() {
+    // Get all elements in document body in order
+    const elements = Array.from(document.body.querySelectorAll('*'));
+    let markdown = '';
+    const processedElements = new Set();
+    const processedImages = new Set();
+    
+    // Process elements in order they appear in the document
+    elements.forEach(element => {
+      // Skip if already processed or not visible
+      if (processedElements.has(element) || 
+          element.offsetParent === null || 
+          getComputedStyle(element).display === 'none') {
+        return;
+      }
+      
+      const tagName = element.tagName.toLowerCase();
+      
+      // Process headings
+      if (/^h[1-6]$/.test(tagName)) {
+        const level = parseInt(tagName.substring(1), 10);
+        const text = cleanText(getTextContent(element));
+        if (text && text !== document.title) { // Avoid duplicating title
+          markdown += '#'.repeat(level) + ' ' + text + '\n\n';
+        }
+        processedElements.add(element);
+      }
+      
+      // Process paragraphs
+      else if (tagName === 'p') {
+        const text = cleanText(getTextContent(element));
+        if (text) {
+          markdown += text + '\n\n';
+        }
+        
+        // Process images within paragraphs
+        element.querySelectorAll('img').forEach(img => {
+          const src = img.src;
+          const alt = img.alt || 'image';
+          if (src && !processedImages.has(src)) {
+            markdown += `![${alt}](${src})\n\n`;
+            processedImages.add(src);
+          }
+        });
+        
+        processedElements.add(element);
+      }
+      
+      // Process standalone images
+      else if (tagName === 'img') {
+        const src = element.src;
+        const alt = element.alt || 'image';
+        if (src && !processedImages.has(src)) {
+          markdown += `![${alt}](${src})\n\n`;
+          processedImages.add(src);
+        }
+        processedElements.add(element);
+      }
+      
+      // Process lists
+      else if (tagName === 'ul' || tagName === 'ol') {
+        const isOrdered = tagName === 'ol';
+        const items = element.querySelectorAll('li');
+        
+        items.forEach((item, index) => {
+          const text = cleanText(getTextContent(item));
+          if (text) {
+            if (isOrdered) {
+              markdown += `${index + 1}. ${text}\n`;
+            } else {
+              markdown += `* ${text}\n`;
+            }
+          }
+          
+          // Process images within list items
+          item.querySelectorAll('img').forEach(img => {
+            const src = img.src;
+            const alt = img.alt || 'image';
+            if (src && !processedImages.has(src)) {
+              markdown += `  ![${alt}](${src})\n`;
+              processedImages.add(src);
+            }
+          });
+          
+          processedElements.add(item);
+        });
+        
+        markdown += '\n';
+        processedElements.add(element);
+      }
+      
+      // Process blockquotes
+      else if (tagName === 'blockquote') {
+        const text = cleanText(getTextContent(element));
+        if (text) {
+          markdown += '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
+        }
+        
+        // Process images within blockquotes
+        element.querySelectorAll('img').forEach(img => {
+          const src = img.src;
+          const alt = img.alt || 'image';
+          if (src && !processedImages.has(src)) {
+            markdown += `> ![${alt}](${src})\n\n`;
+            processedImages.add(src);
+          }
+        });
+        
+        processedElements.add(element);
+      }
+      
+      // Process code blocks
+      else if (tagName === 'pre' || tagName === 'code') {
+        const text = getTextContent(element);
+        if (text) {
+          markdown += '```\n' + text + '\n```\n\n';
+        }
+        processedElements.add(element);
+      }
+    });
+    
+    return markdown;
+  }
+  
   function processMainContent() {
-    // 尝试找到主要内容区域
+    // Try to find main content area
     const mainContentSelectors = [
       'main',
       'article',
@@ -294,49 +512,42 @@ function convertPageToMarkdown() {
     }
     
     if (!mainContent) {
-      mainContent = document.body; // 如果找不到主要内容区域，就使用整个body
+      mainContent = document.body; // If no main content area found, use body
     }
     
     return mainContent;
   }
   
-  // 提取元数据
+  // Extract metadata
   const metadata = extractMetadata();
   
-  // 构建Markdown内容
+  // Build Markdown content
   let markdown = `# ${metadata.title}\n\n`;
   
-  if (metadata.url) {
-    markdown += `原始链接: ${metadata.url}\n\n`;
-  }
-  
   if (metadata.author) {
-    markdown += `作者: ${metadata.author}\n\n`;
+    markdown += `Author: ${metadata.author}\n\n`;
   }
   
   if (metadata.date) {
-    markdown += `发布日期: ${metadata.date}\n\n`;
+    markdown += `Date: ${metadata.date}\n\n`;
   }
   
   markdown += `---\n\n`;
   
-  // 获取主要内容
-  const mainContent = processMainContent();
+  // Process content preserving the original layout
+  markdown += processContent();
   
-  // 处理主要内容
-  markdown += processHeadings();
-  markdown += processParagraphs();
-  markdown += processLists();
-  markdown += processBlockquotes();
-  markdown += processCodeBlocks();
-  markdown += processTables();
-  
-  // 添加图片和链接信息
-  markdown += `## 图片\n\n`;
-  markdown += processImages();
-  
-  markdown += `## 链接\n\n`;
-  markdown += processLinks();
+  // Add remaining unprocessed links in a separate section
+  const links = processLinks();
+  if (links) {
+    markdown += `## Links\n\n`;
+    markdown += links;
+  }
+
+  // Add source link at the end
+  if (metadata.url) {
+    markdown += `\n---\n\nSource: ${metadata.url}\n`;
+  }
   
   return markdown;
 } 

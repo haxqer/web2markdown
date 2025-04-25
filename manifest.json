@@ -3,7 +3,12 @@
   "name": "Web2Markdown",
   "version": "1.0",
   "description": "Convert current webpage to Markdown format",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "downloads"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
